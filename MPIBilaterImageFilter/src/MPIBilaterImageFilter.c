@@ -46,11 +46,11 @@ void ReadPGM(FILE* fp)
 		fgets(buf, 1024, fp);
 	ungetc(c, fp);
 	if (fscanf(fp, "P%d\n", &c) != 1) {
-		printf ("read error ....");
+		printf ("read error ...");
 		exit(0);
 	}
 	if (c != 5 && c != 2) {
-		printf ("read error ....");
+		printf ("read error ...");
 		exit(0);
 	}
 
