@@ -22,8 +22,8 @@
 //#define DEBUG
 
 // Filter parameters
-#define N 7			// this parameter should always be an odd number
-#define sigma1 10
+#define N 9			// this parameter should always be an odd number
+#define sigma1 2
 #define sigma2 40
 
 // Global variables
@@ -62,7 +62,7 @@ void ReadPGM(FILE* fp)
 			printf("failed to read width/height/max\n");
 			exit(0);
 		}
-		printf("Width=%d, Height=%d \nMaximum=%d\n",xdim,ydim,maxraw);
+		//printf("Width=%d, Height=%d \nMaximum=%d\n",xdim,ydim,maxraw);
 
 		image = (unsigned char*)malloc(sizeof(unsigned char)*xdim*ydim);
 		getc(fp);
@@ -86,7 +86,7 @@ void ReadPGM(FILE* fp)
 			printf("failed to read width/height/max\n");
 			exit(0);
 		}
-		printf("Width=%d, Height=%d \nMaximum=%d,\n",xdim,ydim,maxraw);
+		//printf("Width=%d, Height=%d \nMaximum=%d,\n",xdim,ydim,maxraw);
 
 		image = (unsigned char*)malloc(sizeof(unsigned char)*xdim*ydim);
 		getc(fp);
@@ -169,7 +169,6 @@ unsigned char cBilateralFilter( unsigned char *pIterator, int x, int y )
 			result += *(pIterator - left_bound + m + xdim * (n - top_bound)) * w_norm[m][n];
 		}
 
-//	result /= (m_dim * n_dim);
 	return (unsigned char) result;
 }
 
@@ -185,13 +184,11 @@ int main(int argc, char *argv[])
 	int					s = 1;													// sub-division parameter
 	double     		dStartTime = 0, dEndTime = 0;			// time stamps for bench mark
 
-
-
 	/* start up MPI */
 	MPI_Init(&argc, &argv);
 
 	/* find out process rank */
-	MPI_Comm_rank(MPI_COMM_WORLD, &my_rank); 
+	MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
 
 	/* find out number of processes */
 	MPI_Comm_size(MPI_COMM_WORLD, &num_procs);
@@ -232,27 +229,29 @@ int main(int argc, char *argv[])
 			return 0;
 		}
 
-		/* begin reading PGM.... */
-		printf("begin reading PGM.... \n");
-		if ((fp=fopen(argv[1], "r"))==NULL)
-		{
-			printf("read error...\n");
-			MPI_Finalize();
-			return 0;
-		}
-		ReadPGM(fp);
-
-		// Generate start time stamp
-		dStartTime = MPI_Wtime();
 	}
-
-	// Broadcast the input image to all nodes
-	MPI_Bcast( image, xdim * ydim, MPI_CHAR, ROOT, MPI_COMM_WORLD );
-	//printf( "Broadcast return code = %d from node %d \n" , MPI_Bcast( image, xdim * ydim, MPI_CHAR, ROOT, MPI_COMM_WORLD ), my_rank );
 
 	MPI_Barrier( MPI_COMM_WORLD );
 
-	printf( "So far so good boss, @ line %d \n", __LINE__ );
+	/* begin reading PGM.... */
+	if ( my_rank == ROOT )
+		printf("begin reading PGM.... \n");
+	if ((fp=fopen(argv[1], "r"))==NULL)
+	{
+		printf("read error...\n");
+		MPI_Finalize();
+		return 0;
+	}
+	ReadPGM(fp);
+
+	MPI_Barrier( MPI_COMM_WORLD );
+
+	// Generate start time stamp
+	if (my_rank == ROOT)
+		dStartTime = MPI_Wtime();
+
+	// Broadcast the input image to all nodes
+	MPI_Bcast( image, xdim * ydim, MPI_UNSIGNED_CHAR, ROOT, MPI_COMM_WORLD );
 
 	// Calculate each processor's work partition
 	start_index = my_rank * (ydim / num_procs);
@@ -296,13 +295,9 @@ int main(int argc, char *argv[])
 	// Synchronize before allowing root node to collect final image
 	MPI_Barrier( MPI_COMM_WORLD );
 
-	printf( "So far so good boss, @ line %d \n", __LINE__ );
-
 	// Collect sub-result data from all nodes
 	MPI_Gatherv( pSubRef, (end_index - start_index) * xdim, MPI_CHAR, image,
 						   recvcounts, displs, MPI_CHAR, ROOT, MPI_COMM_WORLD );
-
-	printf( "So far so good boss, @ line %d \n", __LINE__ );
 
 	if ( my_rank == ROOT )
 	{
@@ -322,9 +317,10 @@ int main(int argc, char *argv[])
 			return 0;
 		}
 		WritePGM(fp);
-
-		free(image);
 	}
+
+	// Release image resources
+	free(image);
 
 	/* shut down MPI */
 	MPI_Finalize();
